@@ -1,0 +1,73 @@
+--- a/build
++++ b/build
+@@ -38,6 +38,6 @@
+ # now compile ourself
+ echo "Compiling DOSBox-X"
+ chmod +x configure
+-./configure --enable-debug --prefix=/usr "${@}" "${opt}" || exit 1
++./configure --disable-screenshots --disable-opengl --prefix=/usr "${@}" "${opt}" || exit 1
+ make -j3 || exit 1
+ 
+--- a/vs/sdl/build-dosbox.sh
++++ b/vs/sdl/build-dosbox.sh
+@@ -16,6 +16,7 @@
+ 
+ sys=`uname -s`
+ 
++opts="--disable-video-opengl"
+ if [ "$sys" == "Darwin" ]; then
+ opts="--disable-video-x11"
+ fi
+@@ -23,7 +24,17 @@
+ opts="--disable-video-opengl"
+ fi
+ 
+-ac_cv_header_iconv_h=no ac_cv_func_iconv=no ac_cv_lib_iconv_libiconv_open=no ../configure "--srcdir=$srcdir" "--prefix=$instdir" --enable-static --disable-shared --disable-x11-shared --disable-video-x11-xrandr --disable-video-x11-vm --disable-video-x11-xv $opts || exit 1
++ac_cv_header_iconv_h=no ac_cv_func_iconv=no ac_cv_lib_iconv_libiconv_open=no \
++../configure "--srcdir=$srcdir" "--prefix=$instdir" \
++--enable-static --disable-shared \
++--enable-video-x11 --with-x \
++--x-includes=/usr/include \
++--x-libraries=/usr/lib/x86_64-linux-gnu \
++--disable-x11-shared \
++--disable-video-x11-xrandr --disable-video-x11-vm --disable-video-x11-xv \
++$opts || exit 1
++
++grep -E 'SDL_VIDEO_DRIVER_X11|SDL_VIDEO_DRIVER_DUMMY' include/SDL_config.h
+ 
+ if [ "$1" == "hx-dos" ]; then
+ cat >>include/SDL_config.h <<_EOF
+--- a/vs/sdl/src/video/x11/SDL_x11video.c
++++ b/vs/sdl/src/video/x11/SDL_x11video.c
+@@ -1690,8 +1690,9 @@
+     xim_free(this);
+ }
+ 
+-void im_callback(XIM xim, XPointer client_data, XPointer call_data)
++void im_callback(Display *display, XPointer client_data, XPointer call_data)
+ {
++    XIM xim;
+ 	XIMStyle input_style;
+ 	XIMStyles *xim_styles = NULL;
+ 	XIMCallback destroy;
+@@ -1702,6 +1703,11 @@
+ 
+ 	SDL_VideoDevice *this = current_video;
+ 	XVaNestedList preedit_attr = NULL;
++
++    xim = XOpenIM(display, NULL, NULL, NULL);
++    if (xim == NULL) {
++        return;
++    }
+ 
+ 	/*
+ 	 *  Open connection to IM server.
+@@ -2047,7 +2053,7 @@
+ 		return 0;
+ 	}
+ 
+-	if (XRegisterIMInstantiateCallback(SDL_Display, NULL, NULL, NULL, (XIMProc)im_callback, NULL) != True) {
++    if (XRegisterIMInstantiateCallback(SDL_Display, NULL, NULL, NULL, im_callback, NULL) != True) {
+ 		SDL_SetError("XRegisterIMInstantiateCallback false.");
+ #ifdef DEBUG_XEVENTS
+ 		printf("XRegisterIMInstantiateCallback false.\n");
